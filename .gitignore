@@ -1,0 +1,9 @@
+GeminiQuota.exe
+*.pdb
+*.zip
+*.bak
+*.tmp
+artifacts/
+obj/
+bin/
+.vs/
