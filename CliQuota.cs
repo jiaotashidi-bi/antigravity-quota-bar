@@ -4,9 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace GeminiQuota
@@ -77,11 +75,6 @@ namespace GeminiQuota
             return true;
         }
 
-        private static int TimeLeft(Stopwatch elapsed)
-        {
-            return Math.Max(0, 30000 - (int)elapsed.ElapsedMilliseconds);
-        }
-
         private static void Diagnose(string message)
         {
             // A sidecar supervisor may collect stderr. Keep URLs, process output and identity out of it.
@@ -109,12 +102,7 @@ namespace GeminiQuota
 
         private static string Run(string exe, string args, Stopwatch elapsed, string signedFile)
         {
-            if (TimeLeft(elapsed) == 0) return null;
-            ProcessStartInfo info = new ProcessStartInfo(exe, args) {
-                WorkingDirectory = Path.GetTempPath(), UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8
-            };
+            var info = new ProcessStartInfo(exe, args) { WorkingDirectory = Path.GetTempPath() };
             info.EnvironmentVariables["CI"] = "true";
             if (signedFile != null)
             {
@@ -123,29 +111,9 @@ namespace GeminiQuota
             }
             bool usage = signedFile == null && args.StartsWith("-p ", StringComparison.Ordinal);
             if (usage) UseWindowsProxyIfNeeded(info);
-            using (Process process = Process.Start(info))
-            {
-                process.StandardInput.Close();
-                Task<string> output = process.StandardOutput.ReadToEndAsync();
-                Task<string> error = process.StandardError.ReadToEndAsync();
-                if (!process.WaitForExit(TimeLeft(elapsed)))
-                {
-                    try { process.Kill(); } catch (InvalidOperationException) { }
-                    Diagnose(usage ? "quota query timed out" : "CLI verification timed out");
-                    return null;
-                }
-                if (process.ExitCode != 0)
-                {
-                    Diagnose((usage ? "quota query exited " : "CLI verification exited ") + process.ExitCode);
-                    return null;
-                }
-                if (!Task.WaitAll(new Task[] { output, error }, TimeLeft(elapsed)))
-                {
-                    Diagnose("timed out reading CLI output");
-                    return null;
-                }
-                return output.Result;
-            }
+            string result = QuotaCommand.Run(info, elapsed);
+            if (result == null) Diagnose(usage ? "quota query failed or timed out" : "CLI verification failed or timed out");
+            return result;
         }
 
         private static object Field(object item, string key)
