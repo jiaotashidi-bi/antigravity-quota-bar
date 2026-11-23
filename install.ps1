@@ -29,7 +29,7 @@ function RequireStopped {
     foreach ($app in @(Get-Process -Name 'GeminiQuota' -ErrorAction SilentlyContinue)) {
         try {
             if ($app.Path -ieq $exe) {
-                throw 'Exit the quota bar from its tray menu, or close Antigravity normally, then run this command again.'
+                throw 'Close Antigravity, wait for the quota bar to exit, then run this command again.'
             }
         } finally { $app.Dispose() }
     }

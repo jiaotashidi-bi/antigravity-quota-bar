@@ -39,8 +39,6 @@ namespace GeminiQuota
     internal sealed class MonitorContext : ApplicationContext
     {
         private readonly QuotaBar bar = new QuotaBar();
-        private readonly NotifyIcon tray = new NotifyIcon();
-        private readonly ContextMenuStrip menu = new ContextMenuStrip();
         private readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer();
         private Task<QuotaSnapshot> quotaRead;
         private Task<LayoutSample> layoutRead;
@@ -56,17 +54,6 @@ namespace GeminiQuota
 
         public MonitorContext()
         {
-            menu.Items.Add("对话上下文详情", null, delegate
-            {
-                string details = "最近查看的对话 · 上次模型请求\n\n" + ContextReading.Describe(context);
-                MessageBox.Show(details, "Antigravity 对话上下文", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            });
-            menu.Items.Add("立即刷新", null, delegate { nextRefresh = nextContextCheck = DateTime.MinValue; });
-            menu.Items.Add("退出额度条", null, delegate { ExitThread(); });
-            tray.Text = "Gemini 额度";
-            tray.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            tray.ContextMenuStrip = menu;
-            tray.Visible = true;
             tick.Interval = 200;
             tick.Tick += delegate { Update(); };
             tick.Start();
@@ -141,7 +128,6 @@ namespace GeminiQuota
                 else if (value != null && current != null)
                     current = MergeMenu(current, value, null);
                 quotaRead = null;
-                UpdateTray();
             }
             if ((hasHost || activeHost != IntPtr.Zero) && quotaRead == null && now >= nextRefresh)
             {
@@ -172,7 +158,6 @@ namespace GeminiQuota
                         lastMenuReading = sample.Usage.SeenUtc;
                         current = MergeMenu(sample.Usage, latestCli, current);
                         failed = false;
-                        UpdateTray();
                     }
                 }
                 layoutRead = null;
@@ -257,20 +242,11 @@ namespace GeminiQuota
             return (estimate.Value - other.Value).Duration() <= tolerance;
         }
 
-        private void UpdateTray()
-        {
-            tray.Text = current == null ? "模型额度 · 等待可用数据" : String.Format(
-                "Antigravity · {0} 个额度组\n{1:HH:mm:ss} 更新", current.Groups.Count, current.SeenUtc.ToLocalTime());
-        }
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 tick.Dispose();
-                tray.Visible = false;
-                if (tray.Icon != null) tray.Icon.Dispose();
-                tray.Dispose();
-                menu.Dispose();
                 bar.Dispose();
             }
             base.Dispose(disposing);

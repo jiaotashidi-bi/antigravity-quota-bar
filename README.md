@@ -34,7 +34,7 @@ Tested with **Google Antigravity desktop 2.34.0 on Windows x64**. The quota read
 .\install.ps1
 ```
 
-Open Antigravity and enter a chat. Antigravity starts the bar through its Sidecar mechanism. You can also right-click the green tray icon and select **对话上下文详情** to open the same context details, or **立即刷新** to refresh.
+Open Antigravity and enter a chat. The quota bar appears above the input box. Antigravity starts and stops it through its Sidecar mechanism.
 
 If Windows blocks the downloaded scripts, open the downloaded ZIP’s **Properties**, select **Unblock** if shown, and extract it again. For a shell with a restricted execution policy, you can run the installer in a separate PowerShell process with `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1`.
 

@@ -30,7 +30,7 @@
 .\install.ps1
 ```
 
-照常打开 Antigravity 并进入聊天即可。桌面应用通过 Sidecar 启停额度条。也可以右键系统托盘的绿色图标，选择「对话上下文详情」打开同一份明细，或选择「立即刷新」更新读数。
+打开 Antigravity 并进入聊天，额度条就会出现在输入框上方。桌面应用通过 Sidecar 自动启停额度条。
 
 如果 Windows 拦截下载的脚本，可以在 ZIP 文件的「属性」中勾选「解除锁定」后重新解压。如果当前终端限制脚本执行，可在解压目录运行 `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1`，策略只对这次 PowerShell 进程生效。
 
