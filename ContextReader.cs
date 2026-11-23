@@ -9,6 +9,15 @@ namespace GeminiQuota
     {
         public long Used, Limit;
         public string Model;
+
+        internal static string Describe(ContextReading reading)
+        {
+            if (reading == null || reading.Limit <= 0)
+                return "暂无可读的上下文记录。模型完成一次请求后会更新。";
+            string model = String.IsNullOrWhiteSpace(reading.Model) ? "" : "模型   " + reading.Model + "\n";
+            return model + String.Format("预计剩余   {0:N0} tokens\n已用估算   {1:N0} tokens\n窗口上限   {2:N0} tokens",
+                Math.Max(0L, reading.Limit - reading.Used), reading.Used, reading.Limit);
+        }
     }
 
     public static class ContextReader

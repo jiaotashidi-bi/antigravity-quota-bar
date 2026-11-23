@@ -8,10 +8,12 @@ using Microsoft.Win32;
 
 namespace GeminiQuota
 {
-    internal sealed class QuotaBar : Form
+    internal sealed class QuotaBar : OverlayForm
     {
         private IntPtr owner;
-        private float scale = 1;
+        private readonly ContextPopup contextPopup = new ContextPopup();
+        private string hoverConversation;
+        private DateTime hoverSince;
         private readonly List<Row> rows = new List<Row>();
         private string note = "", layoutKey;
         private readonly List<Band> bands = new List<Band>();
@@ -25,30 +27,7 @@ namespace GeminiQuota
 
         public QuotaBar()
         {
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.Manual;
-            ShowInTaskbar = false;
-            AutoScaleMode = AutoScaleMode.None;
             Text = "Gemini 额度";
-            DoubleBuffered = true;
-        }
-        protected override bool ShowWithoutActivation { get { return true; } }
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                var p = base.CreateParams;
-                // Layered + transparent gives mouse input to the application underneath.
-                p.ExStyle |= 0x08000000 | 0x00000080 | 0x00000020 | 0x00080000;
-                return p;
-            }
-        }
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint key, byte alpha, uint flags);
-        protected override void OnHandleCreated(EventArgs e)
-        {
-            base.OnHandleCreated(e);
-            SetLayeredWindowAttributes(Handle, 0, 255, 2);
         }
         private sealed class Cell
         {
@@ -101,11 +80,6 @@ namespace GeminiQuota
 
         private static readonly TextFormatFlags Flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix |
             TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
-        private int Px(float n) { return (int)Math.Round(n * scale); }
-        private Font FontAt(int px, FontStyle style)
-        {
-            return new Font("Microsoft YaHei UI", Px(px), style, GraphicsUnit.Pixel);
-        }
         private static string CellDescription(Cell c)
         {
             if (!c.Provided) return "—";
@@ -167,6 +141,7 @@ namespace GeminiQuota
                 foreach (var block in blocks)
                     Wrap(block, inner);
                 measuredHeight = 2 * Px(4) + Math.Max(1, bands.Count) * Px(20);
+                PositionBlocks(inner);
             }
             return true;
         }
@@ -182,7 +157,10 @@ namespace GeminiQuota
         private sealed class Block
         {
             public readonly List<Run> Runs = new List<Run>();
+            public readonly bool IsContext;
+            public Rectangle Bounds;
             public int Width;
+            public Block(bool isContext = false) { IsContext = isContext; }
             public void Add(Run run)
             {
                 Width += (Runs.Count == 0 ? 0 : run.Gap) + run.Width;
@@ -221,7 +199,7 @@ namespace GeminiQuota
                 status.Add(MakeRun(canvas, blocks.Count == 0 ? "模型额度  " + note : note, Role.Note, small, 0));
                 blocks.Add(status);
             }
-            var context = new Block();
+            var context = new Block(true);
             context.Add(MakeRun(canvas, compact ? "上下文余" : "上下文剩余", Role.Name, name, 0));
             context.Add(MakeRun(canvas, contextValue, Role.Context, number, compact ? 3 : 5));
             blocks.Add(context);
@@ -249,7 +227,7 @@ namespace GeminiQuota
         private void Wrap(Block block, int inner)
         {
             if (block.Width <= inner) { PlaceBlock(block, inner); return; }
-            var part = new Block();
+            var part = new Block(block.IsContext);
             for (int i = 0; i < block.Runs.Count; i++)
             {
                 Run run = block.Runs[i];
@@ -261,13 +239,13 @@ namespace GeminiQuota
                     if (part.Width + run.Gap + windowWidth > inner)
                     {
                         PlaceBlock(part, inner);
-                        part = new Block();
+                        part = new Block(block.IsContext);
                     }
                 }
                 if (part.Runs.Count > 0 && part.Width + run.Gap + run.Width > inner)
                 {
                     PlaceBlock(part, inner);
-                    part = new Block();
+                    part = new Block(block.IsContext);
                 }
                 run.Width = Math.Min(run.Width, inner);
                 part.Add(run);
@@ -286,9 +264,67 @@ namespace GeminiQuota
             band.Blocks.Add(block);
         }
 
-        public void Present(IntPtr host, Rectangle composer, QuotaSnapshot data, bool failed, bool busy, ContextReading context = null)
+        // Paint and pointer hit testing use the same rectangles, including wrapped rows.
+        private void PositionBlocks(int inner)
+        {
+            int y = Px(4);
+            foreach (var band in bands)
+            {
+                int x = Px(10), gaps = band.Blocks.Count - 1;
+                int extra = Math.Max(0, inner - band.Width);
+                for (int i = 0; i < band.Blocks.Count; i++)
+                {
+                    if (i > 0) x += Px(14) + extra * i / gaps - extra * (i - 1) / gaps;
+                    var block = band.Blocks[i];
+                    block.Bounds = new Rectangle(x, y, block.Width, Px(20));
+                    x += block.Width;
+                }
+                y += Px(20);
+            }
+        }
+
+        private void ResetHover()
+        {
+            hoverSince = DateTime.MinValue;
+            if (contextPopup.Visible) contextPopup.Hide();
+        }
+
+        private void UpdateContextHover(Point screenPoint, DateTime now, Rectangle area)
+        {
+            if (Visible && Bounds.Contains(screenPoint))
+            {
+                Point local = PointToClient(screenPoint);
+                foreach (var band in bands)
+                    foreach (var block in band.Blocks)
+                        if (block.IsContext && block.Bounds.Contains(local))
+                        {
+                            if (hoverSince == DateTime.MinValue) hoverSince = now;
+                            if ((now - hoverSince).TotalMilliseconds >= SystemInformation.MouseHoverTime)
+                                contextPopup.Present(this, RectangleToScreen(block.Bounds), area, lastContext, scale, dark);
+                            return;
+                        }
+            }
+            ResetHover();
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            if (!Visible && contextPopup != null) ResetHover();
+            base.OnVisibleChanged(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && contextPopup != null) contextPopup.Dispose();
+            base.Dispose(disposing);
+        }
+
+        public void Present(IntPtr host, Rectangle composer, QuotaSnapshot data, bool failed, bool busy,
+            ContextReading context = null, string conversationId = null)
         {
             var now = DateTime.UtcNow;
+            if (host != owner || hoverConversation != conversationId) ResetHover();
+            hoverConversation = conversationId;
             bool old = data != null && (failed || (now - data.SeenUtc).TotalMinutes >= 3);
             string status = old ? "上次更新 " + data.SeenUtc.ToLocalTime().ToString("HH:mm") :
                 data == null ? (busy ? "读取中" : "暂未获取") : "";
@@ -313,6 +349,7 @@ namespace GeminiQuota
             if (Bounds != target || !Visible) Native.Place(Handle, target);
             if (!Visible) Show();
             if (dirty) Invalidate();
+            UpdateContextHover(Cursor.Position, now, area);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -331,25 +368,18 @@ namespace GeminiQuota
             using (var number = FontAt(12, FontStyle.Bold))
             {
                 g.DrawPath(border, shape);
-                int padding = Px(10), inner = Width - 2 * padding;
-                int y = (Height - bands.Count * Px(20)) / 2;
                 foreach (var band in bands)
                 {
-                    int x = padding;
-                    // Distribute free space between the groups while keeping the first
-                    // and last aligned with the composer's inner margins.
-                    int gaps = band.Blocks.Count - 1;
-                    int extra = Math.Max(0, inner - band.Width);
                     for (int i = 0; i < band.Blocks.Count; i++)
                     {
+                        var block = band.Blocks[i];
+                        int x = block.Bounds.Left, y = block.Bounds.Top;
                         if (i > 0)
                         {
-                            int space = Px(14) + (extra * i / gaps - extra * (i - 1) / gaps);
-                            int divider = x + space / 2;
+                            int right = band.Blocks[i - 1].Bounds.Right;
+                            int divider = right + (x - right) / 2;
                             g.DrawLine(border, divider, y + Px(4), divider, y + Px(16));
-                            x += space;
                         }
-                        var block = band.Blocks[i];
                         for (int j = 0; j < block.Runs.Count; j++)
                         {
                             var run = block.Runs[j];
@@ -369,7 +399,6 @@ namespace GeminiQuota
                             x += run.Width;
                         }
                     }
-                    y += Px(20);
                 }
             }
         }

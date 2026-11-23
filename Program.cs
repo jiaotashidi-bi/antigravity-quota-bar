@@ -58,10 +58,7 @@ namespace GeminiQuota
         {
             menu.Items.Add("对话上下文详情", null, delegate
             {
-                string details = context == null ? "最近查看的对话暂无可读的上下文记录。模型完成一次调用后会重新取样。" :
-                    String.Format("最近查看的对话 · 上次模型请求{3}\n\n预计剩余   {0:N0} tokens\n已用估算   {1:N0} tokens\n窗口上限   {2:N0} tokens\n\n新请求或上下文压缩后的模型调用会更新读数。",
-                        Math.Max(0L, context.Limit - context.Used), context.Used, context.Limit,
-                        String.IsNullOrWhiteSpace(context.Model) ? "" : "\n模型   " + context.Model);
+                string details = "最近查看的对话 · 上次模型请求\n\n" + ContextReading.Describe(context);
                 MessageBox.Show(details, "Antigravity 对话上下文", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             menu.Items.Add("立即刷新", null, delegate { nextRefresh = nextContextCheck = DateTime.MinValue; });
@@ -190,7 +187,7 @@ namespace GeminiQuota
                 nextLayout = now.AddMilliseconds(300);
             }
             if (anchor.IsEmpty) bar.Hide();
-            else bar.Present(activeHost, anchor, current, failed, quotaRead != null, context);
+            else bar.Present(activeHost, anchor, current, failed, quotaRead != null, context, conversationId);
         }
 
         // The menu supplies the percentages on screen. The CLI supplies precise reset

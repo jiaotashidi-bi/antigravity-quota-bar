@@ -18,6 +18,8 @@ Keep an eye on **Gemini quota, reset countdowns, and the remaining context windo
 | **Gemini**, **Claude / GPT**, **Argon** | Groups come from your account. Claude and GPT share a row segment when Google pools their quota. A group with only a weekly limit shows just that window. |
 | **上下文余 ≈63%** | About 63% of the active chat’s request window was available when the last model request began. A new chat shows `—` until it has a recorded request. |
 
+Hover over the context label or its percentage to see the window limit and the estimated token counts already in context and still available when the last request began. The tooltip also shows the model name when available. Move the pointer away to dismiss it.
+
 Quota refreshes every 60 seconds. The clock counts down between checks. Narrowing the window shortens labels first, then wraps the bar if needed. You can click through it, and it gets out of the way when you open the model menu or switch apps.
 
 ## Install on Windows
@@ -32,7 +34,7 @@ Tested with **Google Antigravity desktop 2.34.0 on Windows x64**. The quota read
 .\install.ps1
 ```
 
-Open Antigravity and enter a chat. Antigravity starts the bar through its Sidecar mechanism. Right-click the green tray icon to refresh or select **对话上下文详情** to see the last model, estimated tokens used, remaining tokens, and request limit.
+Open Antigravity and enter a chat. Antigravity starts the bar through its Sidecar mechanism. You can also right-click the green tray icon and select **对话上下文详情** to open the same context details, or **立即刷新** to refresh.
 
 If Windows blocks the downloaded scripts, open the downloaded ZIP’s **Properties**, select **Unblock** if shown, and extract it again. For a shell with a restricted execution policy, you can run the installer in a separate PowerShell process with `powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1`.
 
