@@ -109,9 +109,14 @@ namespace GeminiQuota
                 info.EnvironmentVariables["GEMINI_QUOTA_SIGNED_FILE"] = signedFile;
                 info.EnvironmentVariables["PSModulePath"] = Path.Combine(Path.GetDirectoryName(exe), "Modules");
             }
+            else
+            {
+                // A background quota check must not run the CLI's periodic self-updater.
+                info.EnvironmentVariables["AGY_CLI_DISABLE_AUTO_UPDATE"] = "true";
+            }
             bool usage = signedFile == null && args.StartsWith("-p ", StringComparison.Ordinal);
             if (usage) UseWindowsProxyIfNeeded(info);
-            string result = QuotaCommand.Run(info, elapsed);
+            string result = QuotaCommand.Run(info, elapsed, restrictChildren: signedFile == null);
             if (result == null) Diagnose(usage ? "quota query failed or timed out" : "CLI verification failed or timed out");
             return result;
         }

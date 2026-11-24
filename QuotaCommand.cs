@@ -16,10 +16,10 @@ namespace GeminiQuota
     {
         private const int WaitTimeout = 258;
         private const int TimeoutMilliseconds = 30000;
-        private const uint CreateNoWindow = 0x08000000, UnicodeEnvironment = 0x400;
+        private const uint CreateNoWindow = 0x08000000, DetachedProcess = 0x8, UnicodeEnvironment = 0x400;
         private const uint UseStdHandles = 0x100, UseShowWindow = 1;
 
-        internal static string Run(ProcessStartInfo info, Stopwatch elapsed)
+        internal static string Run(ProcessStartInfo info, Stopwatch elapsed, bool restrictChildren)
         {
             if (elapsed.ElapsedMilliseconds >= TimeoutMilliseconds) return null;
             string name = "GeminiQuota-" + Guid.NewGuid().ToString("N");
@@ -35,11 +35,7 @@ namespace GeminiQuota
                     var start = new StartupInfo { Size = Marshal.SizeOf(typeof(StartupInfo)), Desktop = name,
                         Flags = UseStdHandles | UseShowWindow, Show = 0, Input = nul.DangerousGetHandle(),
                         Output = childOutput.DangerousGetHandle(), Error = nul.DangerousGetHandle() };
-                    var command = new StringBuilder("\"" + info.FileName + "\" " + info.Arguments);
-                    ProcessInfo process;
-                    if (!CreateProcessW(info.FileName, command, IntPtr.Zero, IntPtr.Zero, true,
-                        CreateNoWindow | UnicodeEnvironment, EnvironmentBlock(info.EnvironmentVariables),
-                        info.WorkingDirectory, ref start, out process)) throw new Win32Exception();
+                    ProcessInfo process = Start(info, start, restrictChildren);
                     using (var handle = new SafeWaitHandle(process.Process, true))
                     {
                         CloseHandle(process.Thread);
@@ -51,6 +47,49 @@ namespace GeminiQuota
                         }
                     }
                 }
+            }
+        }
+
+        private static ProcessInfo Start(ProcessStartInfo info, StartupInfo start, bool restrictChildren)
+        {
+            const uint extendedStartupInfoPresent = 0x00080000;
+            const int childProcessPolicy = 0x0002000E, childProcessRestricted = 1;
+            var extended = new StartupInfoEx { Startup = start };
+            // CREATE_NO_WINDOW can still create a hidden conhost for a console EXE.
+            // A child-restricted CLI must start detached and use the redirected handles.
+            uint flags = (restrictChildren ? DetachedProcess : CreateNoWindow) | UnicodeEnvironment;
+            IntPtr allocation = IntPtr.Zero;
+            try
+            {
+                if (restrictChildren)
+                {
+                    // A CLI helper requesting its own console can activate Windows Terminal
+                    // on the input desktop via the system broker. /usage needs no helpers.
+                    IntPtr size = IntPtr.Zero;
+                    InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+                    if (size == IntPtr.Zero) throw new Win32Exception();
+                    int bytes = size.ToInt32();
+                    allocation = Marshal.AllocHGlobal(checked(bytes + sizeof(int)));
+                    if (!InitializeProcThreadAttributeList(allocation, 1, 0, ref size)) throw new Win32Exception();
+                    extended.Attributes = allocation;
+                    IntPtr policy = IntPtr.Add(allocation, bytes);
+                    Marshal.WriteInt32(policy, childProcessRestricted);
+                    if (!UpdateProcThreadAttribute(allocation, 0, new IntPtr(childProcessPolicy), policy,
+                        new IntPtr(sizeof(int)), IntPtr.Zero, IntPtr.Zero)) throw new Win32Exception();
+                    extended.Startup.Size = Marshal.SizeOf(typeof(StartupInfoEx));
+                    flags |= extendedStartupInfoPresent;
+                }
+                var command = new StringBuilder("\"" + info.FileName + "\" " + info.Arguments);
+                ProcessInfo process;
+                if (!CreateProcessW(info.FileName, command, IntPtr.Zero, IntPtr.Zero, true, flags,
+                    EnvironmentBlock(info.EnvironmentVariables), info.WorkingDirectory, ref extended, out process))
+                    throw new Win32Exception();
+                return process;
+            }
+            finally
+            {
+                if (extended.Attributes != IntPtr.Zero) DeleteProcThreadAttributeList(extended.Attributes);
+                Marshal.FreeHGlobal(allocation);
             }
         }
 
@@ -125,6 +164,8 @@ namespace GeminiQuota
             public IntPtr Reserved2, Input, Output, Error;
         }
         [StructLayout(LayoutKind.Sequential)]
+        private struct StartupInfoEx { public StartupInfo Startup; public IntPtr Attributes; }
+        [StructLayout(LayoutKind.Sequential)]
         private struct ProcessInfo { public IntPtr Process, Thread; public uint Pid, Tid; }
         private sealed class DesktopHandle : SafeHandleZeroOrMinusOneIsInvalid
         {
@@ -139,7 +180,13 @@ namespace GeminiQuota
         private static extern SafeFileHandle CreateFileW(string path, uint access, uint sharing, ref SecurityAttributes security, uint disposition, uint flags, IntPtr template);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool CreateProcessW(string exe, StringBuilder args, IntPtr processSecurity, IntPtr threadSecurity, bool inherit, uint flags,
-            string environment, string directory, ref StartupInfo start, out ProcessInfo process);
+            string environment, string directory, ref StartupInfoEx start, out ProcessInfo process);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, uint flags, ref IntPtr size);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returned);
+        [DllImport("kernel32.dll")]
+        private static extern void DeleteProcThreadAttributeList(IntPtr list);
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool PeekNamedPipe(SafePipeHandle pipe, IntPtr buffer, uint length, IntPtr read, out uint available, IntPtr left);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeWaitHandle process, uint milliseconds);

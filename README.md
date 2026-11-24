@@ -40,7 +40,9 @@ If Windows blocks the downloaded scripts, open the downloaded ZIP’s **Properti
 
 ## Where the readings come from
 
-The quota check runs `agy -p "/usage" --output-format json` under your existing Google sign-in. It runs on a separate Windows desktop so its console windows stay out of your session’s view. Opening **View Usage** also lets the bar match the percentages on screen. A dash beside a percentage means the service did not supply a reset time.
+The quota check runs `agy -p "/usage" --output-format json` under your existing Google sign-in. The bar turns off the CLI self-updater for its own background checks and asks Windows to block those checks from launching helper processes. This prevents the updater from briefly opening Windows Terminal during a refresh. You can still update the CLI in your own terminal.
+
+Opening **View Usage** also lets the bar match the percentages on screen. A dash beside a percentage means the service did not supply a reset time.
 
 The context monitor identifies the conversation attached to the visible input box. It opens that conversation’s local SQLite database **read-only** and reads the latest request’s token estimate and window limit. It skips message bodies and tool output. Switching models or compacting a chat changes the displayed estimate when a new model request records those changes.
 
