@@ -12,6 +12,8 @@ namespace GeminiQuota
     {
         private IntPtr owner;
         private readonly ContextPopup contextPopup = new ContextPopup();
+        private readonly UsageButtonWindow usageButton = new UsageButtonWindow();
+        private Block usageBlock;
         private string hoverConversation;
         private DateTime hoverSince;
         private readonly List<Row> rows = new List<Row>();
@@ -28,6 +30,11 @@ namespace GeminiQuota
         public QuotaBar()
         {
             Text = "Gemini 额度";
+        }
+        internal event EventHandler UsageRequested
+        {
+            add { usageButton.UsageRequested += value; }
+            remove { usageButton.UsageRequested -= value; }
         }
         private sealed class Cell
         {
@@ -203,6 +210,10 @@ namespace GeminiQuota
             context.Add(MakeRun(canvas, compact ? "上下文余" : "上下文剩余", Role.Name, name, 0));
             context.Add(MakeRun(canvas, contextValue, Role.Context, number, compact ? 3 : 5));
             blocks.Add(context);
+            // The button paints its own label. Reserve its physical hit area here so
+            // that it wraps with the other groups and never covers the context hover.
+            usageBlock = new Block { Width = Px(40) };
+            blocks.Add(usageBlock);
             return blocks;
         }
         private void AddWindow(Graphics canvas, Block block, string period, Cell cell, Font small, Font number, bool compact)
@@ -276,6 +287,7 @@ namespace GeminiQuota
                 {
                     if (i > 0) x += Px(14) + extra * i / gaps - extra * (i - 1) / gaps;
                     var block = band.Blocks[i];
+                    if (block == usageBlock) x = Px(10) + inner - block.Width;
                     block.Bounds = new Rectangle(x, y, block.Width, Px(20));
                     x += block.Width;
                 }
@@ -309,13 +321,21 @@ namespace GeminiQuota
 
         protected override void OnVisibleChanged(EventArgs e)
         {
-            if (!Visible && contextPopup != null) ResetHover();
+            if (!Visible && contextPopup != null)
+            {
+                ResetHover();
+                if (usageButton != null) usageButton.Hide();
+            }
             base.OnVisibleChanged(e);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && contextPopup != null) contextPopup.Dispose();
+            if (disposing)
+            {
+                contextPopup.Dispose();
+                usageButton.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -349,6 +369,7 @@ namespace GeminiQuota
             if (Bounds != target || !Visible) Native.Place(Handle, target);
             if (!Visible) Show();
             if (dirty) Invalidate();
+            usageButton.Present(this, RectangleToScreen(usageBlock.Bounds), dpi, dark);
             UpdateContextHover(Cursor.Position, now, area);
         }
 

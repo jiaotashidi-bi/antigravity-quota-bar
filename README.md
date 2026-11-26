@@ -20,7 +20,19 @@ Keep an eye on **Gemini quota, reset countdowns, and the remaining context windo
 
 Hover over the context label or its percentage to see the window limit and the estimated token counts already in context and still available when the last request began. The tooltip also shows the model name when available. Move the pointer away to dismiss it.
 
-Quota refreshes every 60 seconds. The clock counts down between checks. Narrowing the window shortens labels first, then wraps the bar if needed. You can click through it, and it gets out of the way when you open the model menu or switch apps.
+Quota refreshes every 60 seconds. The clock counts down between checks. Narrowing the window shortens labels first, then wraps the bar if needed. The quota and context readings are click-through. The bar gets out of the way when you open the model menu or switch apps.
+
+## Local usage dashboard
+
+Click **用量** at the end of the bar to see a snapshot of the active chat's context and a breakdown of recorded usage by model. Choose today, the last 7 or 30 calendar days, or all recorded history. The dashboard counts model requests and shows uncached input, cached input, and output tokens. The cache hit rate divides cached input by total input across the selected requests. A single chat turn can make several model requests.
+
+![Example local usage dashboard with the seven-day trend, active chat context and token counts by model](usage-dashboard.png)
+
+*Example data.*
+
+Hover over a bar in the token chart to see its date range and token count. Requests with recorded usage but no timestamp appear under **全部** (all history). The dashboard reads this Windows user's local Antigravity conversation databases on demand. Use **刷新** to pick up new records. You can also launch it directly with `GeminiQuota.exe --usage`.
+
+The field mapping for recorded token usage was cross-checked against [Agy Powertools’ database reader](https://github.com/WhiteBr1ck/agy-powertools/blob/c9fec80a44dcb2aa15c4d5a346a06b15c6e5e7ce/lib/database.mjs).
 
 ## Install on Windows
 

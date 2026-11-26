@@ -11,15 +11,20 @@ namespace GeminiQuota
     internal static class Program
     {
         [STAThread]
-        private static void Main()
+        private static void Main(string[] args)
         {
+            Native.EnableDpi();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Length == 1 && args[0] == "--usage")
+            {
+                using (var dashboard = new UsageDashboard()) Application.Run(dashboard);
+                return;
+            }
             bool first;
             using (var instance = new Mutex(true, @"Local\Antigravity.GeminiQuotaBar", out first))
             {
                 if (!first) return;
-                Native.EnableDpi();
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
                 using (var app = new MonitorContext()) Application.Run(app);
             }
         }
@@ -39,6 +44,7 @@ namespace GeminiQuota
     internal sealed class MonitorContext : ApplicationContext
     {
         private readonly QuotaBar bar = new QuotaBar();
+        private UsageDashboard dashboard;
         private readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer();
         private Task<QuotaSnapshot> quotaRead;
         private Task<LayoutSample> layoutRead;
@@ -54,9 +60,20 @@ namespace GeminiQuota
 
         public MonitorContext()
         {
+            bar.UsageRequested += ShowUsage;
             tick.Interval = 200;
             tick.Tick += delegate { Update(); };
             tick.Start();
+        }
+
+        private void ShowUsage(object sender, EventArgs e)
+        {
+            if (dashboard == null || dashboard.IsDisposed)
+                dashboard = new UsageDashboard();
+            dashboard.SetContext(context);
+            if (!dashboard.Visible) dashboard.Show();
+            if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
+            dashboard.Activate();
         }
 
         private static bool HasApp()
@@ -247,6 +264,7 @@ namespace GeminiQuota
             if (disposing)
             {
                 tick.Dispose();
+                if (dashboard != null) dashboard.Dispose();
                 bar.Dispose();
             }
             base.Dispose(disposing);
